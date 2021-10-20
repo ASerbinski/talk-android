@@ -67,6 +67,7 @@ import io.requery.Persistable
 import io.requery.android.sqlcipher.SqlCipherDatabaseSource
 import io.requery.reactivex.ReactiveEntityStore
 import org.parceler.Parcels
+import java.net.URI
 import javax.inject.Inject
 
 @AutoInjector(NextcloudTalkApplication::class)
@@ -239,6 +240,24 @@ class MainActivity : BaseActivity(), ActionBarProvider {
                         ).show()
                     }
                 }
+            }
+        }
+
+        if (intent.action == Intent.ACTION_VIEW &&
+            intent.extras?.get("server") != null &&
+            intent.extras?.get("userId") != null
+        ) {
+            val baseUrl = intent.extras?.get("server") as URI // intent.extras.getString("server") is empty?!
+            val user = intent.extras?.get("userId") as String
+
+            if (userUtils.currentUser?.baseUrl?.endsWith(baseUrl.toString()) == true && user.isNotEmpty()) {
+                startConversation(user)
+            } else {
+                Snackbar.make(
+                    binding.controllerContainer,
+                    R.string.nc_phone_book_integration_account_not_found,
+                    Snackbar.LENGTH_LONG
+                ).show()
             }
         }
     }
