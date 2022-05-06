@@ -61,6 +61,9 @@ object NotificationUtils {
     const val DEFAULT_MESSAGE_RINGTONE_URI =
         "android.resource://" + BuildConfig.APPLICATION_ID + "/raw/librem_by_feandesign_message"
 
+    // RemoteInput key - used for replies sent directly from notification
+    const val KEY_DIRECT_REPLY = "key_direct_reply"
+
     @TargetApi(Build.VERSION_CODES.O)
     private fun createNotificationChannel(
         context: Context,
@@ -178,45 +181,46 @@ object NotificationUtils {
         return null
     }
 
-    fun cancelAllNotificationsForAccount(context: Context?, conversationUser: UserEntity) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && conversationUser.id != -1L && context != null) {
+    private inline fun scanNotifications(
+        context: Context?,
+        conversationUser: UserEntity,
+        callback: (
+            notificationManager: NotificationManager,
+            statusBarNotification: StatusBarNotification,
+            notification: Notification
+        ) -> Unit
+    ) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || conversationUser.id == -1L || context == null) {
+            return
+        }
 
-            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-            val statusBarNotifications = notificationManager.activeNotifications
-            var notification: Notification?
-            for (statusBarNotification in statusBarNotifications) {
-                notification = statusBarNotification.notification
+        val statusBarNotifications = notificationManager.activeNotifications
+        var notification: Notification?
+        for (statusBarNotification in statusBarNotifications) {
+            notification = statusBarNotification.notification
 
-                if (notification != null && !notification.extras.isEmpty) {
-                    if (conversationUser.id == notification.extras.getLong(BundleKeys.KEY_INTERNAL_USER_ID)) {
-                        notificationManager.cancel(statusBarNotification.id)
-                    }
-                }
+            if (
+                notification != null &&
+                !notification.extras.isEmpty &&
+                conversationUser.id == notification.extras.getLong(BundleKeys.KEY_INTERNAL_USER_ID)
+            ) {
+                callback(notificationManager, statusBarNotification, notification)
             }
         }
     }
 
+    fun cancelAllNotificationsForAccount(context: Context?, conversationUser: UserEntity) {
+        scanNotifications(context, conversationUser) { notificationManager, statusBarNotification, _ ->
+            notificationManager.cancel(statusBarNotification.id)
+        }
+    }
+
     fun cancelExistingNotificationWithId(context: Context?, conversationUser: UserEntity, notificationId: Long?) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && conversationUser.id != -1L &&
-            context != null
-        ) {
-
-            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-
-            val statusBarNotifications = notificationManager.activeNotifications
-            var notification: Notification?
-            for (statusBarNotification in statusBarNotifications) {
-                notification = statusBarNotification.notification
-
-                if (notification != null && !notification.extras.isEmpty) {
-                    if (
-                        conversationUser.id == notification.extras.getLong(BundleKeys.KEY_INTERNAL_USER_ID) &&
-                        notificationId == notification.extras.getLong(BundleKeys.KEY_NOTIFICATION_ID)
-                    ) {
-                        notificationManager.cancel(statusBarNotification.id)
-                    }
-                }
+        scanNotifications(context, conversationUser) { notificationManager, statusBarNotification, notification ->
+            if (notificationId == notification.extras.getLong(BundleKeys.KEY_NOTIFICATION_ID)) {
+                notificationManager.cancel(statusBarNotification.id)
             }
         }
     }
@@ -226,28 +230,11 @@ object NotificationUtils {
         conversationUser: UserEntity,
         roomTokenOrId: String
     ): StatusBarNotification? {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && conversationUser.id != -1L &&
-            context != null
-        ) {
-
-            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-
-            val statusBarNotifications = notificationManager.activeNotifications
-            var notification: Notification?
-            for (statusBarNotification in statusBarNotifications) {
-                notification = statusBarNotification.notification
-
-                if (notification != null && !notification.extras.isEmpty) {
-                    if (
-                        conversationUser.id == notification.extras.getLong(BundleKeys.KEY_INTERNAL_USER_ID) &&
-                        roomTokenOrId == statusBarNotification.notification.extras.getString(BundleKeys.KEY_ROOM_TOKEN)
-                    ) {
-                        return statusBarNotification
-                    }
-                }
+        scanNotifications(context, conversationUser) { _, statusBarNotification, notification ->
+            if (roomTokenOrId == notification.extras.getString(BundleKeys.KEY_ROOM_TOKEN)) {
+                return statusBarNotification
             }
         }
-
         return null
     }
 
@@ -256,26 +243,9 @@ object NotificationUtils {
         conversationUser: UserEntity,
         roomTokenOrId: String
     ) {
-        if (
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
-            conversationUser.id != -1L &&
-            context != null
-        ) {
-
-            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-
-            val statusBarNotifications = notificationManager.activeNotifications
-            var notification: Notification?
-            for (statusBarNotification in statusBarNotifications) {
-                notification = statusBarNotification.notification
-
-                if (notification != null && !notification.extras.isEmpty) {
-                    if (conversationUser.id == notification.extras.getLong(BundleKeys.KEY_INTERNAL_USER_ID) &&
-                        roomTokenOrId == statusBarNotification.notification.extras.getString(BundleKeys.KEY_ROOM_TOKEN)
-                    ) {
-                        notificationManager.cancel(statusBarNotification.id)
-                    }
-                }
+        scanNotifications(context, conversationUser) { notificationManager, statusBarNotification, notification ->
+            if (roomTokenOrId == notification.extras.getString(BundleKeys.KEY_ROOM_TOKEN)) {
+                notificationManager.cancel(statusBarNotification.id)
             }
         }
     }
@@ -294,15 +264,15 @@ object NotificationUtils {
             // Notification channel will not be available when starting the application for the first time.
             // Ringtone uris are required to register the notification channels -> get uri from preferences.
         }
-        if (TextUtils.isEmpty(ringtonePreferencesString)) {
-            return Uri.parse(defaultRingtoneUri)
+        return if (TextUtils.isEmpty(ringtonePreferencesString)) {
+            Uri.parse(defaultRingtoneUri)
         } else {
             try {
                 val ringtoneSettings =
                     LoganSquare.parse(ringtonePreferencesString, RingtoneSettings::class.java)
-                return ringtoneSettings.ringtoneUri
+                ringtoneSettings.ringtoneUri
             } catch (exception: IOException) {
-                return Uri.parse(defaultRingtoneUri)
+                Uri.parse(defaultRingtoneUri)
             }
         }
     }
