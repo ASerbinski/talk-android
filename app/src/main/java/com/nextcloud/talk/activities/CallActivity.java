@@ -108,12 +108,13 @@ import org.parceler.Parcel;
 import org.webrtc.AudioSource;
 import org.webrtc.AudioTrack;
 import org.webrtc.Camera1Enumerator;
-import org.webrtc.Camera2Enumerator;
+//import org.webrtc.Camera2Enumerator;
 import org.webrtc.CameraEnumerator;
 import org.webrtc.CameraVideoCapturer;
 import org.webrtc.DefaultVideoDecoderFactory;
 import org.webrtc.DefaultVideoEncoderFactory;
 import org.webrtc.EglBase;
+import org.webrtc.ExtCameraEnumerator;
 import org.webrtc.IceCandidate;
 import org.webrtc.Logging;
 import org.webrtc.MediaConstraints;
@@ -386,13 +387,13 @@ public class CallActivity extends CallBaseActivity {
     private void createCameraEnumerator() {
         boolean camera2EnumeratorIsSupported = false;
         try {
-            camera2EnumeratorIsSupported = Camera2Enumerator.isSupported(this);
+            camera2EnumeratorIsSupported = ExtCameraEnumerator.isSupported(this);
         } catch (final Throwable t) {
             Log.w(TAG, "Camera2Enumerator threw an error", t);
         }
 
         if (camera2EnumeratorIsSupported) {
-            cameraEnumerator = new Camera2Enumerator(this);
+            cameraEnumerator = new ExtCameraEnumerator(this);
         } else {
             cameraEnumerator = new Camera1Enumerator(MagicWebRTCUtils.shouldEnableVideoHardwareAcceleration());
         }
@@ -828,7 +829,6 @@ public class CallActivity extends CallBaseActivity {
                 }
             }
         }
-
 
         // Front facing camera not found, try something else
         Logging.d(TAG, "Looking for other cameras.");
@@ -1742,7 +1742,7 @@ public class CallActivity extends CallBaseActivity {
 
     private void startVideoCapture() {
         if (videoCapturer != null) {
-            videoCapturer.startCapture(1280, 720, 30);
+            videoCapturer.startCapture(1280, 960, 30);
         }
     }
 
